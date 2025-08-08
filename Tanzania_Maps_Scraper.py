@@ -13,7 +13,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import NoSuchElementException, WebDriverException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException
 import undetected_chromedriver as uc
 from fake_useragent import UserAgent
 import sqlite3
@@ -93,20 +95,30 @@ def live_progress(msg):
 # DYNAMIC SEARCH TYPE BUILDER
 # -----------------------
 def fetch_related_terms(term):
-    suggestions = []
+    """Fetch related search terms using Google's suggestion API.
+
+    The previous implementation scraped the entire search results page which
+    returned a lot of unrelated text fragments (e.g. "councilhttps").  As a
+    consequence the dynamically generated search term list contained junk
+    tokens and the scraper would query Google Maps with meaningless phrases.
+    This function now leverages the public suggestion endpoint which returns a
+    clean JSON payload of relevant search suggestions.
+    """
     headers = {"User-Agent": UserAgent().random}
     try:
-        url = f"https://www.google.com/search?q={term}+Tanzania"
-        resp = requests.get(url, headers=headers, timeout=10)
+        params = {"client": "firefox", "hl": "sw", "q": term}
+        resp = requests.get(
+            "https://suggestqueries.google.com/complete/search",
+            params=params,
+            headers=headers,
+            timeout=10,
+        )
         resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        for div in soup.find_all("div"):
-            text = div.get_text().strip().lower()
-            if 2 <= len(text.split()) <= 5 and re.search(r'[a-zA-Z]', text):
-                suggestions.append(text)
-    except RequestException as e:
+        data = resp.json()
+        return [s.lower() for s in data[1] if isinstance(s, str)]
+    except (RequestException, ValueError) as e:
         logger.warning(f"Suggest fetch error for '{term}': {e}")
-    return suggestions
+        return []
 
 
 def build_dynamic_search_types():
@@ -120,6 +132,13 @@ def build_dynamic_search_types():
             word_freq.update(tokens)
             all_terms.update(tokens)
         time.sleep(random.uniform(1, 2))
+    if not all_terms:
+        live_progress("No suggestions fetched; keeping existing dynamic search types")
+        try:
+            with open(SEARCH_TYPES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
     filtered = [w for w in word_freq if word_freq[w] > 1]
     all_terms = sorted(set(filtered))
     with open(SEARCH_TYPES_FILE, "w", encoding="utf-8") as f:
@@ -421,19 +440,24 @@ def scrape_term_at_coord(driver, actions, term: str, lat: float, lng: float):
         launch_browser(force_new_proxy=True)
         return 0
 
-    # Locate results list panel
+    # Locate results list panel (Google frequently changes class names)
     try:
-        panel = driver.find_element(By.CSS_SELECTOR, 'div.m6QErb.DxyBCb.kA9KIf.dS8AEf')
-    except NoSuchElementException:
-        live_progress("Results panel not found; skipping coord")
-        return 0
+        panel = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'div[role="feed"]'))
+        )
+    except TimeoutException:
+        try:
+            panel = driver.find_element(By.CSS_SELECTOR, 'div.m6QErb.DxyBCb.kA9KIf.dS8AEf')
+        except NoSuchElementException:
+            live_progress("Results panel not found; skipping coord")
+            return 0
 
     seen_names = set()
     scraped_here = 0
 
     for s in range(SCROLL_LIMIT):
         time.sleep(random.uniform(*ACTION_PAUSE))
-        cards = driver.find_elements(By.CSS_SELECTOR, 'div.Nv2PK')
+        cards = panel.find_elements(By.CSS_SELECTOR, 'div.Nv2PK')
         if not cards:
             break
         for c in cards:
