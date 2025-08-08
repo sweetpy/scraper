@@ -93,20 +93,30 @@ def live_progress(msg):
 # DYNAMIC SEARCH TYPE BUILDER
 # -----------------------
 def fetch_related_terms(term):
-    suggestions = []
+    """Fetch related search terms using Google's suggestion API.
+
+    The previous implementation scraped the entire search results page which
+    returned a lot of unrelated text fragments (e.g. "councilhttps").  As a
+    consequence the dynamically generated search term list contained junk
+    tokens and the scraper would query Google Maps with meaningless phrases.
+    This function now leverages the public suggestion endpoint which returns a
+    clean JSON payload of relevant search suggestions.
+    """
     headers = {"User-Agent": UserAgent().random}
     try:
-        url = f"https://www.google.com/search?q={term}+Tanzania"
-        resp = requests.get(url, headers=headers, timeout=10)
+        params = {"client": "firefox", "hl": "sw", "q": term}
+        resp = requests.get(
+            "https://suggestqueries.google.com/complete/search",
+            params=params,
+            headers=headers,
+            timeout=10,
+        )
         resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        for div in soup.find_all("div"):
-            text = div.get_text().strip().lower()
-            if 2 <= len(text.split()) <= 5 and re.search(r'[a-zA-Z]', text):
-                suggestions.append(text)
-    except RequestException as e:
+        data = resp.json()
+        return [s.lower() for s in data[1] if isinstance(s, str)]
+    except (RequestException, ValueError) as e:
         logger.warning(f"Suggest fetch error for '{term}': {e}")
-    return suggestions
+        return []
 
 
 def build_dynamic_search_types():
