@@ -1,7 +1,8 @@
 # Tanzania Business Intelligence Scraper
 # ================================
 # Scrapes Google Maps for ALL types of businesses in Tanzania (formal & informal)
-# Saves semantically enriched data into SQLite DB with resilience for long-term scraping
+# Uses a wide static category list by default so coverage isn't limited by dynamic
+# suggestion availability and saves semantically enriched data into SQLite DB
 # Offline, standalone only. No cloud. Research use only.
 
 import time
@@ -70,6 +71,7 @@ TERM_FILTER = None         # run only terms containing this substring
 REGION_FILTER = None       # export or API filter hint
 EXPORT_FORMATS = ["csv", "json", "xlsx"]
 RUN_MAX_HOURS = None       # optional auto-stop
+INCLUDE_DYNAMIC = False    # include dynamic_search_types.json terms if available
 
 STOP_FLAG = False
 
@@ -92,7 +94,7 @@ def live_progress(msg):
     logger.info(msg)
 
 # -----------------------
-# DYNAMIC SEARCH TYPE BUILDER
+# DYNAMIC SEARCH TYPE BUILDER (optional)
 # -----------------------
 def fetch_related_terms(term):
     """Fetch related search terms using Google's suggestion API.
@@ -173,17 +175,19 @@ STATIC_TERMS = [
     "harusi", "mapambo"
 ]
 
-def load_search_types():
-    try:
-        with open(SEARCH_TYPES_FILE, "r", encoding="utf-8") as f:
-            dynamic_terms = json.load(f)
-    except Exception:
-        dynamic_terms = []
-    combined = sorted(set(STATIC_TERMS + dynamic_terms))
+def load_search_types(include_dynamic: bool = INCLUDE_DYNAMIC):
+    terms = list(STATIC_TERMS)
+    if include_dynamic:
+        try:
+            with open(SEARCH_TYPES_FILE, "r", encoding="utf-8") as f:
+                terms.extend(json.load(f))
+        except Exception:
+            live_progress("No dynamic terms loaded")
     if TERM_FILTER:
-        combined = [t for t in combined if TERM_FILTER.lower() in t.lower()]
-    live_progress(f"Search types loaded: {len(combined)}")
-    return combined
+        terms = [t for t in terms if TERM_FILTER.lower() in t.lower()]
+    terms = sorted(set(terms))
+    live_progress(f"Search types loaded: {len(terms)}")
+    return terms
 
 # -----------------------
 # EMAIL + REVIEW EXTRACTION
@@ -656,9 +660,6 @@ def run_scraper(max_hours: float | None = RUN_MAX_HOURS):
     if not os.path.exists(EXPORT_DIR):
         os.makedirs(EXPORT_DIR, exist_ok=True)
 
-    # ensure dynamic terms exist
-    if not os.path.exists(SEARCH_TYPES_FILE) or os.path.getsize(SEARCH_TYPES_FILE) == 0:
-        build_dynamic_search_types()
     terms = load_search_types()
     if not terms:
         live_progress("No search terms available; aborting run")
@@ -863,8 +864,8 @@ def main():
         export_by_region(EXPORT_FORMATS)
         return
 
-    # ensure dynamic terms exist
-    if not os.path.exists(SEARCH_TYPES_FILE) or os.path.getsize(SEARCH_TYPES_FILE) == 0:
+    # optionally ensure dynamic terms exist
+    if INCLUDE_DYNAMIC and (not os.path.exists(SEARCH_TYPES_FILE) or os.path.getsize(SEARCH_TYPES_FILE) == 0):
         build_dynamic_search_types()
 
     # schedule daily run
