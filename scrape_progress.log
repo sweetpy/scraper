@@ -1,0 +1,55 @@
+[2025-08-08 11:18:24,451] INFO: Started immediate scraping run from GUI.
+[2025-08-08 11:18:26,614] INFO: Seed 'duka': 0 suggestions
+[2025-08-08 11:18:29,711] INFO: Seed 'huduma': 0 suggestions
+[2025-08-08 11:18:34,560] INFO: Seed 'fundi': 95 suggestions
+[2025-08-08 11:18:35,966] INFO: Search types loaded: 95
+[2025-08-08 11:18:38,129] INFO: Seed 'mgahawa': 0 suggestions
+[2025-08-08 11:18:41,720] INFO: Seed 'saluni': 0 suggestions
+[2025-08-08 11:18:45,978] INFO: Search types loaded: 95
+[2025-08-08 11:18:48,019] INFO: Seed 'machinga': 90 suggestions
+[2025-08-08 11:18:52,520] INFO: Seed 'boda boda': 0 suggestions
+[2025-08-08 11:18:55,517] INFO: Seed 'kibanda': 0 suggestions
+[2025-08-08 11:18:55,976] INFO: Search types loaded: 95
+[2025-08-08 11:18:58,813] INFO: Search types loaded: 95
+[2025-08-08 11:19:00,847] INFO: Seed 'hospitali': 0 suggestions
+[2025-08-08 11:19:04,013] INFO: Seed 'chuo': 0 suggestions
+[2025-08-08 11:19:04,205] INFO: Search types loaded: 95
+[2025-08-08 11:19:05,740] INFO: Saved 97 dynamic search terms
+[2025-08-08 11:19:05,820] INFO: Search types loaded: 190
+[2025-08-08 11:19:05,821] INFO: Resume from term_idx=0, coord_idx=0
+[2025-08-08 11:19:06,885] INFO: Search types loaded: 190
+[2025-08-08 11:19:07,974] INFO: Search types loaded: 190
+[2025-08-08 11:19:08,777] INFO: Search types loaded: 190
+[2025-08-08 11:19:18,792] INFO: Search types loaded: 190
+[2025-08-08 11:19:22,546] INFO: Search types loaded: 190
+[2025-08-08 11:19:26,592] INFO: Search types loaded: 190
+[2025-08-08 11:19:28,789] INFO: Search types loaded: 190
+[2025-08-08 11:19:38,815] INFO: Searching 'africa' @ -11.8,29.2
+[2025-08-08 11:19:39,500] INFO: Search types loaded: 190
+[2025-08-08 11:19:49,481] INFO: Search types loaded: 190
+[2025-08-08 11:19:59,483] INFO: Search types loaded: 190
+[2025-08-08 11:20:08,428] INFO: Results panel not found; skipping coord
+[2025-08-08 11:20:08,428] INFO: Scraped 0 records for 'africa' @ -11.8,29.2
+[2025-08-08 11:20:09,498] INFO: Search types loaded: 190
+[2025-08-08 11:20:18,780] INFO: Search types loaded: 190
+[2025-08-08 11:20:20,088] INFO: Search types loaded: 190
+[2025-08-08 11:20:30,079] INFO: Search types loaded: 190
+[2025-08-08 11:20:40,080] INFO: Search types loaded: 190
+[2025-08-08 11:20:50,074] INFO: Search types loaded: 190
+[2025-08-08 11:20:53,348] INFO: Search types loaded: 190
+[2025-08-08 11:21:00,083] INFO: Search types loaded: 190
+[2025-08-08 11:21:10,079] INFO: Search types loaded: 190
+[2025-08-08 11:21:15,878] INFO: Search types loaded: 190
+[2025-08-08 11:21:20,075] INFO: Search types loaded: 190
+[2025-08-08 11:21:20,922] INFO: Searching 'africa' @ -11.8,29.38
+[2025-08-08 11:21:30,086] INFO: Search types loaded: 190
+[2025-08-08 11:21:40,086] INFO: Search types loaded: 190
+[2025-08-08 11:21:40,347] INFO: Results panel not found; skipping coord
+[2025-08-08 11:21:40,347] INFO: Scraped 0 records for 'africa' @ -11.8,29.38
+[2025-08-08 11:21:50,492] INFO: Search types loaded: 190
+[2025-08-08 11:22:00,500] INFO: Search types loaded: 190
+[2025-08-08 11:22:10,491] INFO: Search types loaded: 190
+[2025-08-08 11:22:20,489] INFO: Search types loaded: 190
+[2025-08-08 11:22:30,487] INFO: Search types loaded: 190
+[2025-08-08 11:22:33,588] INFO: Searching 'africa' @ -11.8,29.56
+[2025-08-08 11:22:40,496] INFO: Search types loaded: 190

@@ -1,0 +1,12 @@
+selenium
+undetected-chromedriver
+fake-useragent
+pandas
+schedule
+requests
+beautifulsoup4
+textblob
+geopy
+fastapi
+uvicorn
+openpyxl

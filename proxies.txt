@@ -1,0 +1,3 @@
+# One proxy per line (optional). Examples:
+# http://user:pass@1.2.3.4:8080
+# http://1.2.3.5:8080
