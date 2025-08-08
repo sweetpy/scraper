@@ -52,7 +52,6 @@ SEED_TERMS = [
     "duka", "huduma", "fundi", "mgahawa", "saluni", "machinga", "boda boda", "kibanda", "hospitali", "chuo"
 ]
 
-SEARCH_TYPES_FILE = "dynamic_search_types.json"
 SCRAPE_LOG = "scrape_progress.log"
 DB_FILE = "bizinteltz.db"
 EXPORT_DIR = "exports"
@@ -71,7 +70,9 @@ TERM_FILTER = None         # run only terms containing this substring
 REGION_FILTER = None       # export or API filter hint
 EXPORT_FORMATS = ["csv", "json", "xlsx"]
 RUN_MAX_HOURS = None       # optional auto-stop
-INCLUDE_DYNAMIC = False    # include dynamic_search_types.json terms if available
+INCLUDE_DYNAMIC = False    # fetch Google suggestion terms to broaden search
+
+DYNAMIC_TERMS = None
 
 STOP_FLAG = False
 
@@ -135,22 +136,11 @@ def build_dynamic_search_types():
             all_terms.update(tokens)
         time.sleep(random.uniform(1, 2))
     if not all_terms:
-        live_progress("No suggestions fetched; keeping existing dynamic search types")
-        if os.path.exists(SEARCH_TYPES_FILE):
-            try:
-                with open(SEARCH_TYPES_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        # fallback: seed file with default Swahili terms so scraper still runs
-        with open(SEARCH_TYPES_FILE, "w", encoding="utf-8") as f:
-            json.dump(SEED_TERMS, f, ensure_ascii=False, indent=2)
+        live_progress("No suggestions fetched; using seed terms only")
         return SEED_TERMS
     filtered = [w for w in word_freq if word_freq[w] > 1]
     all_terms = sorted(set(filtered))
-    with open(SEARCH_TYPES_FILE, "w", encoding="utf-8") as f:
-        json.dump(all_terms, f, ensure_ascii=False, indent=2)
-    live_progress(f"Saved {len(all_terms)} dynamic search terms")
+    live_progress(f"Built {len(all_terms)} dynamic search terms")
     return all_terms
 
 # -----------------------
@@ -177,12 +167,11 @@ STATIC_TERMS = [
 
 def load_search_types(include_dynamic: bool = INCLUDE_DYNAMIC):
     terms = list(STATIC_TERMS)
+    global DYNAMIC_TERMS
     if include_dynamic:
-        try:
-            with open(SEARCH_TYPES_FILE, "r", encoding="utf-8") as f:
-                terms.extend(json.load(f))
-        except Exception:
-            live_progress("No dynamic terms loaded")
+        if DYNAMIC_TERMS is None:
+            DYNAMIC_TERMS = build_dynamic_search_types()
+        terms.extend(DYNAMIC_TERMS)
     if TERM_FILTER:
         terms = [t for t in terms if TERM_FILTER.lower() in t.lower()]
     terms = sorted(set(terms))
@@ -863,10 +852,6 @@ def main():
     if args.export_now:
         export_by_region(EXPORT_FORMATS)
         return
-
-    # optionally ensure dynamic terms exist
-    if INCLUDE_DYNAMIC and (not os.path.exists(SEARCH_TYPES_FILE) or os.path.getsize(SEARCH_TYPES_FILE) == 0):
-        build_dynamic_search_types()
 
     # schedule daily run
     schedule.clear()
