@@ -1,0 +1,130 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Tanzania Business Intelligence Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f4f6f8;color:#333;}
+  header{background:#1b4d3e;color:#fff;padding:16px 32px;display:flex;justify-content:space-between;align-items:center;}
+  h1{margin:0;font-size:24px;}
+  main{max-width:1200px;margin:24px auto;padding:0 16px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;}
+  .card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+  .card h3{margin:8px 0 0 0;font-size:28px;}
+  .tabs{display:flex;gap:8px;margin-bottom:16px;}
+  .tab{padding:8px 12px;border-radius:6px;cursor:pointer;background:#e0e0e0;}
+  .tab.active{background:#1b4d3e;color:#fff;}
+  section{display:none;}
+  section.active{display:block;}
+  table{width:100%;border-collapse:collapse;margin-top:12px;background:#fff;}
+  th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px;}
+  canvas{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+  .actions button{margin-left:8px;}
+  .muted{color:#666;font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tanzania Business Intelligence</h1>
+  <div class="actions">
+    <button onclick="refresh()">Refresh</button>
+    <button onclick="exportNow()">Export</button>
+    <button onclick="downloadDB()">Download DB</button>
+  </div>
+</header>
+<main>
+  <div class="cards">
+    <div class="card"><div>Total Businesses</div><h3 id="total">-</h3><div class="muted" id="lastRun"></div></div>
+    <div class="card"><div>Search Terms</div><h3 id="terms">-</h3></div>
+    <div class="card"><div>Coord Cells</div><h3 id="coords">-</h3></div>
+    <div class="card"><div>Checkpoint</div><h3 id="checkpoint">-</h3></div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-tab="daily">Daily</div>
+    <div class="tab" data-tab="regions">Regions</div>
+    <div class="tab" data-tab="categories">Categories</div>
+    <div class="tab" data-tab="logs">Logs</div>
+  </div>
+  <section id="daily" class="active">
+    <canvas id="chartDaily" height="260"></canvas>
+  </section>
+  <section id="regions">
+    <canvas id="chartRegions" height="260"></canvas>
+    <h4>Latest 50</h4>
+    <table id="tblRegions"><thead><tr><th>Name</th><th>Category</th><th>Region</th><th>Rating</th><th>Phone</th></tr></thead><tbody></tbody></table>
+  </section>
+  <section id="categories">
+    <canvas id="chartCategories" height="260"></canvas>
+  </section>
+  <section id="logs">
+    <pre id="logbox" style="max-height:360px;overflow:auto;background:#fff;padding:8px;border-radius:8px;"></pre>
+  </section>
+</main>
+<script>
+let currentTab='daily';
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.tab).classList.add('active');
+    currentTab=t.dataset.tab;
+    if(currentTab==='regions'){loadRegions(); loadBusinesses();}
+    if(currentTab==='categories'){loadCategories();}
+    if(currentTab==='logs'){loadLogs();}
+  });
+});
+async function refresh(){
+  const s=await fetch('/stats').then(r=>r.json());
+  document.getElementById('total').textContent=s.total;
+  document.getElementById('terms').textContent=s.terms;
+  document.getElementById('coords').textContent=s.coords;
+  document.getElementById('lastRun').textContent='UTC '+(s.time||'');
+  const cp=await fetch('/progress').then(r=>r.json());
+  document.getElementById('checkpoint').textContent=`term ${cp.term_idx} / coord ${cp.coord_idx}`;
+  if(currentTab==='daily'){drawDaily();}
+}
+async function drawDaily(){
+  const data=await fetch('/daily').then(r=>r.json());
+  const c=document.getElementById('chartDaily'),ctx=c.getContext('2d');
+  c.width=c.clientWidth;ctx.clearRect(0,0,c.width,c.height);
+  if(!data.length){ctx.fillText('No data yet',10,20);return;}
+  const xs=data.map(d=>d.day),ys=data.map(d=>d.cnt);
+  const max=Math.max(...ys),min=Math.min(...ys);const pad=30;const W=c.width-pad*2,H=c.height-pad*2;
+  function sx(i){return pad+(i/(xs.length-1))*W;}
+  function sy(v){return pad+H-((v-min)/(max-min||1))*H;}
+  ctx.strokeStyle='#1b4d3e';ctx.beginPath();ctx.moveTo(sx(0),sy(ys[0]));
+  for(let i=1;i<ys.length;i++){ctx.lineTo(sx(i),sy(ys[i]));}ctx.stroke();
+  ctx.fillStyle='#666';ctx.fillText(xs[0],pad,c.height-5);ctx.fillText(xs[xs.length-1],c.width-60,c.height-5);
+}
+async function loadRegions(){
+  const data=await fetch('/regions').then(r=>r.json());
+  drawBarChart('chartRegions',data.slice(0,10).map(r=>r.region||'UNK'),data.slice(0,10).map(r=>r.cnt));
+}
+async function loadBusinesses(){
+  const rows=await fetch('/businesses?limit=50').then(r=>r.json());
+  const tb=document.querySelector('#tblRegions tbody');tb.innerHTML='';
+  rows.forEach(r=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${r.name||''}</td><td>${r.category||''}</td><td>${r.region||''}</td><td>${r.rating||''}</td><td>${r.phone||''}</td>`;tb.appendChild(tr);});
+}
+async function loadCategories(){
+  const data=await fetch('/categories').then(r=>r.json());
+  drawBarChart('chartCategories',data.slice(0,10).map(r=>r.category||'UNK'),data.slice(0,10).map(r=>r.cnt));
+}
+async function loadLogs(){
+  const t=await fetch('/logs').then(r=>r.text());
+  document.getElementById('logbox').textContent=t;
+}
+function drawBarChart(id,labels,values){
+  const c=document.getElementById(id),ctx=c.getContext('2d');
+  c.width=c.clientWidth;ctx.clearRect(0,0,c.width,c.height);
+  const max=Math.max(...values,1);const barWidth=c.width/labels.length;
+  ctx.fillStyle='#1b4d3e';
+  labels.forEach((l,i)=>{const h=(values[i]/max)*(c.height-20);ctx.fillRect(i*barWidth+10,c.height-h-20,barWidth-20,h);ctx.fillStyle='#333';ctx.fillText(l,i*barWidth+10,c.height-5);ctx.fillStyle='#1b4d3e';});
+}
+async function exportNow(){await fetch('/export',{method:'POST'});alert('Exported to /exports');}
+function downloadDB(){window.location='/download/db';}
+refresh();setInterval(refresh,10000);
+</script>
+</body>
+</html>
