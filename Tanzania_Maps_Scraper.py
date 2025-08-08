@@ -23,7 +23,7 @@ import schedule
 import datetime
 import json
 from fastapi import FastAPI, Response
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import FileResponse
 import uvicorn
 import threading
 import requests
@@ -134,11 +134,16 @@ def build_dynamic_search_types():
         time.sleep(random.uniform(1, 2))
     if not all_terms:
         live_progress("No suggestions fetched; keeping existing dynamic search types")
-        try:
-            with open(SEARCH_TYPES_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
+        if os.path.exists(SEARCH_TYPES_FILE):
+            try:
+                with open(SEARCH_TYPES_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        # fallback: seed file with default Swahili terms so scraper still runs
+        with open(SEARCH_TYPES_FILE, "w", encoding="utf-8") as f:
+            json.dump(SEED_TERMS, f, ensure_ascii=False, indent=2)
+        return SEED_TERMS
     filtered = [w for w in word_freq if word_freq[w] > 1]
     all_terms = sorted(set(filtered))
     with open(SEARCH_TYPES_FILE, "w", encoding="utf-8") as f:
@@ -446,9 +451,18 @@ def scrape_term_at_coord(driver, actions, term: str, lat: float, lng: float):
             EC.presence_of_element_located((By.CSS_SELECTOR, 'div[role="feed"]'))
         )
     except TimeoutException:
-        try:
-            panel = driver.find_element(By.CSS_SELECTOR, 'div.m6QErb.DxyBCb.kA9KIf.dS8AEf')
-        except NoSuchElementException:
+        panel = None
+        for sel in [
+            'div.m6QErb.DxyBCb.kA9KIf.dS8AEf',
+            'div[aria-label^="Results"]',
+            'div.section-scrollbox'
+        ]:
+            try:
+                panel = driver.find_element(By.CSS_SELECTOR, sel)
+                break
+            except NoSuchElementException:
+                continue
+        if not panel:
             live_progress("Results panel not found; skipping coord")
             return 0
 
@@ -673,144 +687,7 @@ def run_scraper(max_hours: float | None = RUN_MAX_HOURS):
 # FastAPI (local viewer + controls)
 # -----------------------
 app = FastAPI()
-
-DASHBOARD_HTML = """
-<!doctype html>
-<html>
-<head>
-<meta charset='utf-8'>
-<title>TZ Biz Scraper Dashboard</title>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
-<style>
- body{font-family:Arial, sans-serif;max-width:1200px;margin:24px auto;padding:0 16px}
- header{display:flex;justify-content:space-between;align-items:center}
- .tabs{display:flex;gap:8px;margin:12px 0}
- .tab{padding:8px 12px;border:1px solid #222;border-radius:8px;cursor:pointer}
- .tab.active{background:#222;color:#fff}
- .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0}
- .card{border:1px solid #ddd;border-radius:10px;padding:14px}
- table{width:100%;border-collapse:collapse;margin-top:12px}
- th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:13px}
- .btn{padding:8px 12px;border-radius:8px;border:1px solid #222;background:#222;color:#fff;cursor:pointer}
- .btn.outline{background:#fff;color:#222}
- .muted{color:#666;font-size:12px}
- #chart{width:100%;height:260px;border:1px solid #eee;border-radius:8px}
-</style>
-</head>
-<body>
-<header>
-  <h2>Tanzania Business Scraper</h2>
-  <div>
-    <button class='btn' onclick='refresh()'>Refresh</button>
-    <button class='btn outline' onclick='exportNow()'>Export</button>
-    <button class='btn outline' onclick='downloadDB()'>Download DB</button>
-  </div>
-</header>
-<div class='tabs'>
-  <div class='tab active' data-t='overview' onclick='showTab(this)'>Overview</div>
-  <div class='tab' data-t='regions' onclick='showTab(this)'>Regions</div>
-  <div class='tab' data-t='categories' onclick='showTab(this)'>Categories</div>
-  <div class='tab' data-t='logs' onclick='showTab(this)'>Logs</div>
-  <div class='tab' data-t='settings' onclick='showTab(this)'>Settings</div>
-</div>
-<section id='overview'>
-  <div class='cards'>
-    <div class='card'><div>Total Businesses</div><h3 id='total'>-</h3><div class='muted' id='lastRun'></div></div>
-    <div class='card'><div>Search Terms</div><h3 id='terms'>-</h3></div>
-    <div class='card'><div>Coord Cells</div><h3 id='coords'>-</h3></div>
-    <div class='card'><div>Checkpoint</div><h3 id='checkpoint'>-</h3></div>
-  </div>
-  <canvas id='chart'></canvas>
-</section>
-<section id='regions' style='display:none'>
-  <label>Filter: <input id='region' placeholder='Dar es Salaam' onkeyup='loadBusinesses()'></label>
-  <table id='tblR'><thead><tr><th>Region</th><th>Count</th></tr></thead><tbody></tbody></table>
-  <h4>Latest 50</h4>
-  <table id='tblB'><thead><tr><th>Name</th><th>Category</th><th>Region</th><th>Rating</th><th>Phone</th></tr></thead><tbody></tbody></table>
-</section>
-<section id='categories' style='display:none'>
-  <table id='tblC'><thead><tr><th>Category</th><th>Count</th></tr></thead><tbody></tbody></table>
-</section>
-<section id='logs' style='display:none'>
-  <pre id='logbox' style='max-height:360px;overflow:auto;border:1px solid #eee;padding:8px;border-radius:8px'></pre>
-</section>
-<section id='settings' style='display:none'>
-  <button class='btn' onclick='exportNow()'>Export Now</button>
-  <button class='btn outline' onclick='backupNow()'>Backup DB</button>
-</section>
-<script>
-let active='overview';
-function showTab(el){
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  active=el.dataset.t;
-  document.querySelectorAll('section').forEach(s=>s.style.display='none');
-  document.getElementById(active).style.display='block';
-  refresh();
-}
-async function refresh(){
-  const s = await fetch('/stats').then(r=>r.json());
-  document.getElementById('total').textContent = s.total;
-  document.getElementById('terms').textContent = s.terms;
-  document.getElementById('coords').textContent = s.coords;
-  document.getElementById('lastRun').textContent = 'UTC '+(s.time||'');
-  const cp = await fetch('/progress').then(r=>r.json());
-  document.getElementById('checkpoint').textContent = `term ${cp.term_idx} / coord ${cp.coord_idx}`;
-  drawChart();
-  if(active==='regions'){ loadRegions(); loadBusinesses(); }
-  if(active==='categories'){ loadCategories(); }
-  if(active==='logs'){ loadLogs(); }
-}
-async function loadBusinesses(){
-  const region = document.getElementById('region').value;
-  const q = region? `/businesses?limit=50&region=${encodeURIComponent(region)}` : '/businesses?limit=50';
-  const rows = await fetch(q).then(r=>r.json());
-  const tb = document.querySelector('#tblB tbody');
-  tb.innerHTML = '';
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.name||''}</td><td>${r.category||''}</td><td>${r.region||''}</td><td>${r.rating||''}</td><td>${r.phone||''}</td>`;
-    tb.appendChild(tr);
-  })
-}
-async function loadRegions(){
-  const rows = await fetch('/regions').then(r=>r.json());
-  const tb = document.querySelector('#tblR tbody'); tb.innerHTML='';
-  rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.region||'UNKNOWN'}</td><td>${r.cnt}</td>`; tb.appendChild(tr); })
-}
-async function loadCategories(){
-  const rows = await fetch('/categories').then(r=>r.json());
-  const tb = document.querySelector('#tblC tbody'); tb.innerHTML='';
-  rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.category||'UNKNOWN'}</td><td>${r.cnt}</td>`; tb.appendChild(tr); })
-}
-async function loadLogs(){
-  const t = await fetch('/logs').then(r=>r.text());
-  document.getElementById('logbox').textContent = t;
-}
-async function exportNow(){ await fetch('/export', {method:'POST'}); alert('Exported to /exports'); }
-async function backupNow(){ await fetch('/backup', {method:'POST'}); alert('DB backup created'); }
-function downloadDB(){ window.location='/download/db'; }
-// tiny chart: daily count line
-async function drawChart(){
-  const data = await fetch('/daily').then(r=>r.json());
-  const c=document.getElementById('chart'); const ctx=c.getContext('2d');
-  c.width=c.clientWidth; c.height=c.clientHeight; ctx.clearRect(0,0,c.width,c.height);
-  if(!data.length){ ctx.fillText('No data yet',10,20); return; }
-  const xs = data.map(d=>d.day); const ys=data.map(d=>d.cnt);
-  const max=Math.max(...ys), min=Math.min(...ys);
-  const pad=30; const W=c.width-pad*2; const H=c.height-pad*2;
-  function sx(i){ return pad + (i/(xs.length-1))*W; }
-  function sy(v){ return pad + H - ((v-min)/(max-min||1))*H; }
-  ctx.strokeStyle='#333'; ctx.beginPath(); ctx.moveTo(sx(0), sy(ys[0]));
-  for(let i=1;i<ys.length;i++){ ctx.lineTo(sx(i), sy(ys[i])); }
-  ctx.stroke();
-  ctx.fillStyle='#666'; ctx.fillText(xs[0], pad, c.height-5); ctx.fillText(xs[xs.length-1], c.width-60, c.height-5);
-}
-refresh(); setInterval(refresh, 10000);
-</script>
-</body>
-</html>
-"""
+DASHBOARD_PATH = Path(__file__).with_name("dashboard.html")
 
 @app.get("/health")
 def health():
@@ -818,7 +695,7 @@ def health():
 
 @app.get("/")
 def root():
-    return HTMLResponse(DASHBOARD_HTML)
+    return FileResponse(DASHBOARD_PATH)
 
 @app.get("/stats")
 def stats():
